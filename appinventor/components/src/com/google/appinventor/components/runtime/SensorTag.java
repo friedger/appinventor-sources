@@ -21,6 +21,7 @@ import com.google.appinventor.components.runtime.util.SdkLevel;
 
 import android.os.Handler;
 import android.util.Log;
+import android.bluetooth.BluetoothDevice;
 
 import java.io.IOException;
 import java.util.UUID;
@@ -40,16 +41,19 @@ import java.util.concurrent.atomic.AtomicReference;
 @UsesPermissions(permissionNames =
                  "android.permission.BLUETOOTH, " +
                  "android.permission.BLUETOOTH_ADMIN")
-public final class SensorTag extends BluetoothConnectionBase {
+public final class SensorTag extends AndroidNonvisibleComponent
+        implements Component, Deleteable, BluetoothReflection.BleScanCallback {
   private static final String SPP_UUID = "00001101-0000-1000-8000-00805F9B34FB";
-
+    private static final String SENSOR_TAG = "Sensor Tag";
+    protected final String logTag;
   private final Handler androidUIHandler;
 
   /**
    * Creates a new BluetoothServer.
    */
-  public SensorTag(ComponentContainer container) {
-    super(container, "SensorTag");
+  public SensorTag(ComponentContainer container, String logTag) {
+    super(container.$form());
+    this.logTag = logTag;
     androidUIHandler = new Handler();
   }
 
@@ -57,8 +61,11 @@ public final class SensorTag extends BluetoothConnectionBase {
    * Start scanning the environment for SensorTags.
    */
   @SimpleFunction(description = "Start scanning the environment for SensorTags ")
-  public void FindSensorTags() {
+  public void FindSensorTags(String uuidString) {
+      findSensorTags("FindSensorTags", uuidString);
+  }
 
+  private void findSensorTags(String functionName, String uuidString){
     final Object bluetoothAdapter = BluetoothReflection.getBluetoothAdapter();
     if (bluetoothAdapter == null) {
       form.dispatchErrorOccurredEvent(this, functionName,
@@ -81,97 +88,43 @@ public final class SensorTag extends BluetoothConnectionBase {
       return;
     }
 
-    try {
-      if (!secure && SdkLevel.getLevel() >= SdkLevel.LEVEL_) {
-        // listenUsingInsecureRfcommWithServiceRecord was introduced in level 10
-        bluetoothServerSocket = BluetoothReflection.listenUsingInsecureRfcommWithServiceRecord(
-            bluetoothAdapter, name, uuid);
-      } else {
-        bluetoothServerSocket = BluetoothReflection.listenUsingRfcommWithServiceRecord(
-            bluetoothAdapter, name, uuid);
-      }
-      arBluetoothServerSocket.set(bluetoothServerSocket);
-    } catch (IOException e) {
-      form.dispatchErrorOccurredEvent(this, functionName,
-          ErrorMessages.ERROR_BLUETOOTH_UNABLE_TO_LISTEN);
-      return;
-    }
-
-    AsynchUtil.runAsynchronously(new Runnable() {
-      public void run() {
-        Object acceptedBluetoothSocket = null;
-
-        Object bluetoothServerSocket = arBluetoothServerSocket.get();
-        if (bluetoothServerSocket != null) {
-          try {
-            try {
-              acceptedBluetoothSocket = BluetoothReflection.accept(bluetoothServerSocket);
-            } catch (IOException e) {
-              androidUIHandler.post(new Runnable() {
-                public void run() {
-                  form.dispatchErrorOccurredEvent(BluetoothServer.this, functionName,
-                      ErrorMessages.ERROR_BLUETOOTH_UNABLE_TO_ACCEPT);
-                }
-              });
-              return;
-            }
-          } finally {
-            StopAccepting();
-          }
-        }
-
-        if (acceptedBluetoothSocket != null) {
-          // Call setConnection and signal the event on the main thread.
-          final Object bluetoothSocket = acceptedBluetoothSocket;
-          androidUIHandler.post(new Runnable() {
-            public void run() {
-              try {
-                setConnection(bluetoothSocket);
-              } catch (IOException e) {
-                Disconnect();
-                form.dispatchErrorOccurredEvent(BluetoothServer.this, functionName,
-                    ErrorMessages.ERROR_BLUETOOTH_UNABLE_TO_ACCEPT);
-                return;
-              }
-
-              ConnectionAccepted();
-            }
-          });
-        }
-      }
-    });
-  }
-
-  /**
-   * Returns true if this BluetoothServer component is accepting an
-   * incoming connection.
-   */
-  @SimpleProperty(category = PropertyCategory.BEHAVIOR)
-  public final boolean IsAccepting() {
-    return (arBluetoothServerSocket.get() != null);
-  }
-
-  /**
-   * Stop accepting an incoming connection.
-   */
-  @SimpleFunction(description = "Stop accepting an incoming connection.")
-  public void StopAccepting() {
-    Object bluetoothServerSocket = arBluetoothServerSocket.getAndSet(null);
-    if (bluetoothServerSocket != null) {
-      try {
-        BluetoothReflection.closeBluetoothServerSocket(bluetoothServerSocket);
-      } catch (IOException e) {
-        Log.w(logTag, "Error while closing bluetooth server socket: " + e.getMessage());
-      }
+    if (SdkLevel.getLevel() >= SdkLevel.LEVEL_JELLYBEAN_MR2) {
+       // startLeScan was introduced in level 18
+       BluetoothReflection.startLeScan(bluetoothAdapter, this );
     }
   }
 
   /**
    * Indicates that a bluetooth connection has been accepted.
    */
-  @SimpleEvent(description = "Indicates that a bluetooth connection has been accepted.")
-  public void ConnectionAccepted() {
-    Log.i(logTag, "Successfullly accepted bluetooth connection.");
-    EventDispatcher.dispatchEvent(this, "ConnectionAccepted");
+  @SimpleEvent(description = "SensorTag has been found")
+  public void SensorTagFound(String deviceName, String data) {
+    Log.i(logTag, "Successfullly found a sensorTag.");
+    EventDispatcher.dispatchEvent(this, "SensorTagFound", deviceName);
   }
+
+    final protected static char[] hexArray = "0123456789ABCDEF".toCharArray();
+    public static String bytesToHex(byte[] bytes) {
+        char[] hexChars = new char[bytes.length * 2];
+        for ( int j = 0; j < bytes.length; j++ ) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = hexArray[v >>> 4];
+            hexChars[j * 2 + 1] = hexArray[v & 0x0F];
+        }
+        return new String(hexChars);
+    }
+
+    @Override
+    public void onLeScan(Object bluetoothDevice, Object rssi, Object data) {
+        String deviceName = ((BluetoothDevice) bluetoothDevice).getName();
+        if (SENSOR_TAG.equals(deviceName)) {
+
+            SensorTagFound(deviceName, bytesToHex((byte[]) data));
+        }
+    }
+
+    @Override
+    public void onDelete() {
+        //TODO prepareToDie
+}
 }

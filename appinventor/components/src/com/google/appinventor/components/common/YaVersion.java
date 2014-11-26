@@ -11,7 +11,7 @@ package com.google.appinventor.components.common;
  *
  */
 public class YaVersion {
-  private YaVersion() {
+    private YaVersion() {
   }
 
   // ............................ Young Android System Version Number .............................
@@ -790,6 +790,10 @@ public class YaVersion {
   // For YANDEX_COMPONENT_VERSION 1:
   // - Initial version.
   public static final int YANDEX_COMPONENT_VERSION = 1;
+
+  // For SENSOR_TAG_COMPONENT_VERSION 1:
+  // - InitialVersion
+  public static final int SENSOR_TAG_COMPONENT_VERSION = 1;
 
   // Rendezvous Server Location
 

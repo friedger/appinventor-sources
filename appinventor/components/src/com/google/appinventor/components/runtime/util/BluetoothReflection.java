@@ -327,11 +327,43 @@ public class BluetoothReflection {
   public static void closeBluetoothServerSocket(Object bluetoothServerSocket) throws IOException {
     // bluetoothServerSocket.close();
     invokeMethodThrowsIOException(getMethod(bluetoothServerSocket.getClass(), "close"),
-        bluetoothServerSocket);
+            bluetoothServerSocket);
   }
 
 
-  // Reflection helper methods
+  /**
+   * Invokes the method {@link android.bluetooth.BluetoothServerSocket#close()}.
+   *
+   * @param bluetoothAdapter
+   */
+   public static void startLeScan(Object bluetoothAdapter, final BleScanCallback bleDeviceCallback) {
+       Class callbackClass = getClass("android.bluetooth.BluetoothAdapter.LeScanCallback");
+       Object callback =  java.lang.reflect.Proxy.newProxyInstance(bluetoothAdapter.getClass().getClassLoader(), new java.lang.Class[] { callbackClass },
+               new java.lang.reflect.InvocationHandler() {
+
+                   @Override
+                   public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                       String method_name = method.getName();
+                       if (method_name.equals("onLeScan")) {
+                            bleDeviceCallback.onLeScan(proxy, args[0], args[1]);
+                       }
+                       return null;
+                   };
+               });
+
+           // bluetoothAdapter.startLeScan(callback);
+       invokeMethod(getMethod(bluetoothAdapter.getClass(), "startLeScan", callbackClass), bluetoothAdapter, callback);
+   }
+
+    // Reflection helper methods
+
+  private static Class getClass(String name){
+    try {
+        return Class.forName(name);
+    } catch (ClassNotFoundException e) {
+        throw new RuntimeException(e);
+    }
+  }
 
   private static Method getMethod(Class clazz, String name) {
     try {
@@ -417,5 +449,9 @@ public class BluetoothReflection {
         throw new RuntimeException(e);
       }
     }
+  }
+
+  public static interface BleScanCallback {
+      void onLeScan(Object bluetoothDevice, Object rssi, Object data);
   }
 }
